@@ -115,9 +115,13 @@ const AdminLayout = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${sidebar.open ? drawerWidth : 0}px)` },
-          ml: { sm: `${sidebar.open ? drawerWidth : 0}px` },
+          ml: { sm: sidebar.open ? `${drawerWidth}px` : 0 },
+          width: { sm: sidebar.open ? `calc(100% - ${drawerWidth}px)` : '100%' },
           zIndex: (theme) => theme.zIndex.drawer + 1,
+          transition: theme.transitions.create(['margin', 'width'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
         }}
       >
         <Toolbar>
@@ -230,9 +234,9 @@ const AdminLayout = () => {
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${sidebar.open ? drawerWidth : 0}px)` },
-          ml: { sm: `${sidebar.open ? drawerWidth : 0}px` },
-          transition: theme.transitions.create(['margin', 'width'], {
+         // ml: { sm: sidebar.open ? `${drawerWidth}px` : 0 },
+          ml: { sm: sidebar.open ? `${0}px` : 0 },
+          transition: theme.transitions.create(['margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),

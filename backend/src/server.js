@@ -15,6 +15,7 @@ const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const examRoutes = require('./routes/exam.routes');
 const evaluationRoutes = require('./routes/evaluation.routes');
+const examCodeRoutes = require('./routes/examCode.routes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/error.middleware');
@@ -54,6 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', authMiddleware, adminRoutes);
 app.use('/api/exam', examRoutes); // Some routes will be public, others protected
 app.use('/api/evaluation', authMiddleware, evaluationRoutes);
+app.use('/api/exam-codes', examCodeRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

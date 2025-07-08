@@ -8,7 +8,20 @@ const questionSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['descriptive', 'mcq'],
+      enum: [
+        'descriptive', 
+        'mcq', 
+        'true_false', 
+        'fill_blank', 
+        'matching', 
+        'coding',
+        'essay',
+        'short_answer',
+        'problem_solving',
+        'code_explanation',
+        'case_study',
+        'design'
+      ],
       default: 'descriptive',
     },
     options: {
@@ -59,12 +72,6 @@ const sectionSchema = new mongoose.Schema(
 
 const questionPaperSchema = new mongoose.Schema(
   {
-    examCode: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
     title: {
       type: String,
       required: true,
@@ -90,6 +97,17 @@ const questionPaperSchema = new mongoose.Schema(
       required: true,
       min: 10, // Minimum 10 minutes
       max: 240, // Maximum 4 hours
+    },
+    questionType: {
+      type: String,
+      enum: ['objective', 'subjective', 'mixed'],
+      default: 'mixed',
+    },
+    objectivePercentage: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50,
     },
     sections: {
       type: [sectionSchema],

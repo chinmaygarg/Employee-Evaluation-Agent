@@ -8,7 +8,20 @@ const questionBankSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['descriptive', 'mcq'],
+      enum: [
+        'descriptive', 
+        'mcq', 
+        'true_false', 
+        'fill_blank', 
+        'matching', 
+        'coding',
+        'essay',
+        'short_answer',
+        'problem_solving',
+        'code_explanation',
+        'case_study',
+        'design'
+      ],
       default: 'descriptive',
     },
     options: {

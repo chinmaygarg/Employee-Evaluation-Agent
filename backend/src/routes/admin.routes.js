@@ -3,7 +3,6 @@ const {
   createQuestionPaper,
   getAllQuestionPapers,
   getQuestionPaperById,
-  getQuestionPaperByExamCode,
   updateQuestionPaper,
   addQuestionToSection,
   removeQuestionFromSection,
@@ -18,6 +17,7 @@ const {
   getEvaluationsByExamCode,
   getEvaluationsByCandidate,
   downloadEvaluationReport,
+  downloadAnswersSheet,
   regenerateEvaluation,
   getEvaluationStats,
 } = require('../controllers/evaluation.controller');
@@ -31,19 +31,28 @@ const {
   getCandidateStats,
 } = require('../controllers/candidate.controller');
 
-const { validate, questionPaperSchemas } = require('../middleware/validation.middleware');
+const {
+  regenerateQuestion,
+  testConnection,
+} = require('../controllers/llm.controller');
+
+const {
+  triggerMissingEvaluations,
+} = require('../controllers/evaluationTrigger.controller');
+
+const { validate, normalizeExperience, questionPaperSchemas } = require('../middleware/validation.middleware');
 
 const router = express.Router();
 
 // Question Paper routes
 router.post(
   '/question-papers',
+  normalizeExperience,
   validate(questionPaperSchemas.create),
   createQuestionPaper
 );
 router.get('/question-papers', getAllQuestionPapers);
 router.get('/question-papers/:id', getQuestionPaperById);
-router.get('/question-papers/code/:examCode', getQuestionPaperByExamCode);
 router.put('/question-papers/:id', updateQuestionPaper);
 router.post(
   '/question-papers/:id/questions',
@@ -68,7 +77,9 @@ router.get('/evaluations/:id', getEvaluationById);
 router.get('/evaluations/exam/:examCode', getEvaluationsByExamCode);
 router.get('/evaluations/candidate/:candidateId', getEvaluationsByCandidate);
 router.get('/evaluations/:id/report', downloadEvaluationReport);
+router.get('/evaluations/:id/answers', downloadAnswersSheet);
 router.post('/evaluations/:id/regenerate', regenerateEvaluation);
+router.post('/evaluations/trigger-missing', triggerMissingEvaluations);
 
 // Candidate routes
 router.get('/candidates', getAllCandidates);
@@ -77,5 +88,9 @@ router.get('/candidates/search', searchCandidate);
 router.get('/candidates/:id', getCandidateById);
 router.get('/candidates/:id/sessions', getCandidateSessions);
 router.put('/candidates/:id', updateCandidate);
+
+// LLM routes
+router.post('/llm/regenerate-question', regenerateQuestion);
+router.get('/llm/test', testConnection);
 
 module.exports = router;

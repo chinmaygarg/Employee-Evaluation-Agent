@@ -2,11 +2,13 @@ const QuestionPaper = require('../models/questionPaper.model');
 const Candidate = require('../models/candidate.model');
 const ExamSession = require('../models/examSession.model');
 const Evaluation = require('../models/evaluation.model');
+const ExamCode = require('../models/examCode.model');
 const { asyncHandler } = require('../middleware/error.middleware');
 const llmService = require('../services/llm.service');
 const emailService = require('../services/email.service');
 const pdfService = require('../services/pdf.service');
 const logger = require('../config/logger');
+const path = require('path');
 
 /**
  * @desc    Validate exam code
@@ -16,18 +18,25 @@ const logger = require('../config/logger');
 const validateExamCode = asyncHandler(async (req, res) => {
   const { examCode } = req.params;
   
-  // Find question paper by exam code
-  const questionPaper = await QuestionPaper.findOne({ 
-    examCode, 
+  // Find exam code
+  const examCodeRecord = await ExamCode.findOne({
+    code: examCode,
     isActive: true,
-  });
+    isUsed: false,
+    $or: [
+      { expiresAt: { $gt: new Date() } },
+      { expiresAt: null }
+    ]
+  }).populate('questionPaperId');
   
-  if (!questionPaper) {
+  if (!examCodeRecord || !examCodeRecord.questionPaperId.isActive) {
     return res.status(404).json({
       success: false,
       message: 'Invalid exam code or exam is not active',
     });
   }
+  
+  const questionPaper = examCodeRecord.questionPaperId;
   
   res.status(200).json({
     success: true,
@@ -49,18 +58,25 @@ const validateExamCode = asyncHandler(async (req, res) => {
 const startExam = asyncHandler(async (req, res) => {
   const { name, email, mobile, examCode } = req.body;
   
-  // Find question paper by exam code
-  const questionPaper = await QuestionPaper.findOne({ 
-    examCode, 
+  // Find exam code
+  const examCodeRecord = await ExamCode.findOne({
+    code: examCode,
     isActive: true,
-  });
+    isUsed: false,
+    $or: [
+      { expiresAt: { $gt: new Date() } },
+      { expiresAt: null }
+    ]
+  }).populate('questionPaperId');
   
-  if (!questionPaper) {
+  if (!examCodeRecord || !examCodeRecord.questionPaperId.isActive) {
     return res.status(404).json({
       success: false,
       message: 'Invalid exam code or exam is not active',
     });
   }
+  
+  const questionPaper = examCodeRecord.questionPaperId;
   
   // Find or create candidate
   const candidate = await Candidate.findOrCreate({
@@ -95,6 +111,9 @@ const startExam = asyncHandler(async (req, res) => {
   // Save session
   await session.save();
   
+  // Mark exam code as used
+  await examCodeRecord.markAsUsed(candidate._id, session._id);
+  
   // Update candidate with new session
   candidate.sessions.push({
     examCode,
@@ -127,6 +146,7 @@ const startExam = asyncHandler(async (req, res) => {
  */
 const getExamQuestionPaper = asyncHandler(async (req, res) => {
   const { sessionId } = req.params;
+  const { forCompletion } = req.query;
   
   // Find session
   const session = await ExamSession.findById(sessionId);
@@ -138,8 +158,8 @@ const getExamQuestionPaper = asyncHandler(async (req, res) => {
     });
   }
   
-  // Check if session is still active
-  if (session.status !== 'in-progress') {
+  // Check if session is still active (unless it's for completion page)
+  if (session.status !== 'in-progress' && !forCompletion) {
     return res.status(400).json({
       success: false,
       message: 'Exam session is no longer active',
@@ -372,6 +392,7 @@ const getSessionStatus = asyncHandler(async (req, res) => {
     success: true,
     data: {
       status: session.status,
+      examCode: session.examCode,
       startTime: session.startTime,
       endTime: session.endTime,
       submittedAt: session.submittedAt,
@@ -416,6 +437,10 @@ const evaluateExam = async (sessionId) => {
       candidateId: session.candidate._id,
       questionPaperId: questionPaper._id,
       overallScore: evaluation.overallScore,
+      completionRate: evaluation.completionRate || 0,
+      accuracyRate: evaluation.accuracyRate || 0,
+      answeredCount: evaluation.answeredCount || 0,
+      totalQuestions: evaluation.totalQuestions || 0,
       sectionScores: evaluation.sectionScores,
       questionEvaluations: evaluation.questionEvaluations,
       summary: evaluation.summary,
@@ -445,28 +470,38 @@ const evaluateExam = async (sessionId) => {
       await candidate.save();
     }
     
-    // Generate PDF report
-    const reportPath = await pdfService.generateEvaluationReport(
-      evaluationRecord,
-      session,
-      questionPaper
-    );
+    // Generate PDF report (optional - don't fail if this doesn't work)
+    try {
+      const reportPath = await pdfService.generateEvaluationReport(
+        evaluationRecord,
+        session,
+        questionPaper
+      );
+      
+      // Update evaluation with report URL
+      evaluationRecord.reportUrl = reportPath.split('/').pop(); // Just store filename
+      await evaluationRecord.save();
+    } catch (pdfError) {
+      logger.error(`Failed to generate PDF report: ${pdfError.message}`);
+      // Continue without PDF - this is not critical
+    }
     
-    // Update evaluation with report URL
-    evaluationRecord.reportUrl = reportPath.split('/').pop(); // Just store filename
-    await evaluationRecord.save();
-    
-    // Send email notification to admin
-    await emailService.sendEvaluationToAdmin(
-      evaluationRecord,
-      session,
-      questionPaper,
-      reportPath
-    );
-    
-    // Mark as sent to admin
-    evaluationRecord.sentToAdmin = true;
-    await evaluationRecord.save();
+    // Send email notification to admin (optional)
+    try {
+      await emailService.sendEvaluationToAdmin(
+        evaluationRecord,
+        session,
+        questionPaper,
+        evaluationRecord.reportUrl ? path.join(__dirname, '../../reports', evaluationRecord.reportUrl) : null
+      );
+      
+      // Mark as sent to admin
+      evaluationRecord.sentToAdmin = true;
+      await evaluationRecord.save();
+    } catch (emailError) {
+      logger.error(`Failed to send evaluation email: ${emailError.message}`);
+      // Continue without email - this is not critical
+    }
     
     logger.info(`Evaluation completed for session ${sessionId}`);
     return evaluationRecord;

@@ -63,6 +63,63 @@ class PDFService {
       }
     });
   }
+
+  /**
+   * Generate answers sheet PDF
+   * @param {Object} evaluation - Evaluation data
+   * @param {Object} session - Exam session data
+   * @param {Object} questionPaper - Question paper data
+   * @returns {Promise<string>} - Path to generated PDF
+   */
+  async generateAnswersSheet(evaluation, session, questionPaper) {
+    return new Promise((resolve, reject) => {
+      try {
+        // Create filename and directory if it doesn't exist
+        const reportDir = path.join(__dirname, '../../reports');
+        if (!fs.existsSync(reportDir)) {
+          fs.mkdirSync(reportDir, { recursive: true });
+        }
+        
+        const filename = `answers_${session._id}_${Date.now()}.pdf`;
+        const filePath = path.join(reportDir, filename);
+        
+        // Create PDF document
+        const doc = new PDFDocument({
+          autoFirstPage: true,
+          size: 'A4',
+          margin: 50,
+          info: {
+            Title: `Answer Sheet - ${session.candidate.name}`,
+            Author: 'Smart Examination System',
+          },
+        });
+        
+        // Pipe PDF to file
+        const stream = fs.createWriteStream(filePath);
+        doc.pipe(stream);
+        
+        // Add content to PDF
+        this._addAnswersContent(doc, evaluation, session, questionPaper);
+        
+        // Finalize PDF
+        doc.end();
+        
+        // Handle stream events
+        stream.on('finish', () => {
+          logger.info(`PDF answers sheet generated: ${filePath}`);
+          resolve(filePath);
+        });
+        
+        stream.on('error', (error) => {
+          logger.error(`Error generating answers sheet: ${error.message}`);
+          reject(error);
+        });
+      } catch (error) {
+        logger.error(`Failed to generate answers sheet: ${error.message}`);
+        reject(error);
+      }
+    });
+  }
   
   /**
    * Add content to PDF document
@@ -190,6 +247,96 @@ class PDFService {
           .fontSize(8).text(` ${q.feedback}`);
         
         doc.moveDown(0.5);
+      });
+      
+      doc.moveDown();
+    });
+    
+    // Add footer
+    this._addFooter(doc);
+  }
+
+  /**
+   * Add answers content to PDF document
+   * @private
+   */
+  _addAnswersContent(doc, evaluation, session, questionPaper) {
+    // Add header
+    doc.fontSize(20).text('Answer Sheet', { align: 'center' });
+    doc.moveDown();
+    
+    // Add candidate information
+    doc.fontSize(14).text('Candidate Information');
+    doc.moveDown(0.5);
+    
+    doc.fontSize(10);
+    this._addKeyValueRow(doc, 'Name:', session.candidate.name);
+    this._addKeyValueRow(doc, 'Email:', session.candidate.email);
+    this._addKeyValueRow(doc, 'Mobile:', session.candidate.mobile);
+    this._addKeyValueRow(doc, 'Exam Code:', session.examCode);
+    this._addKeyValueRow(doc, 'Exam Title:', questionPaper.title);
+    this._addKeyValueRow(doc, 'Job Role:', questionPaper.jobRole);
+    this._addKeyValueRow(doc, 'Experience Level:', questionPaper.experience);
+    this._addKeyValueRow(doc, 'Start Time:', session.startTime.toLocaleString());
+    this._addKeyValueRow(doc, 'End Time:', session.endTime ? session.endTime.toLocaleString() : 'N/A');
+    
+    doc.moveDown();
+    
+    // Add answers by section
+    doc.fontSize(14).text('Answers by Section');
+    doc.moveDown(0.5);
+    
+    // Group questions by section
+    const sectionMap = new Map();
+    questionPaper.sections.forEach(section => {
+      sectionMap.set(section._id.toString(), section.title);
+    });
+    
+    const questionsBySection = new Map();
+    evaluation.questionEvaluations.forEach(q => {
+      const sectionTitle = sectionMap.get(q.sectionId?.toString()) || 'Unknown Section';
+      if (!questionsBySection.has(sectionTitle)) {
+        questionsBySection.set(sectionTitle, []);
+      }
+      questionsBySection.get(sectionTitle).push(q);
+    });
+    
+    // Add each section and its questions
+    Array.from(questionsBySection.entries()).forEach(([sectionTitle, questions]) => {
+      // Add page break if needed
+      if (doc.y > 700) {
+        doc.addPage();
+      }
+      
+      doc.fontSize(12).text(sectionTitle, { underline: true });
+      doc.moveDown(0.5);
+      
+      questions.forEach((q, index) => {
+        // Add page break if needed
+        if (doc.y > 650) {
+          doc.addPage();
+        }
+        
+        doc.fontSize(10).text(`Question ${index + 1}:`, { continued: false })
+          .fontSize(9).text(q.questionText, { indent: 20 });
+        
+        doc.moveDown(0.3);
+        
+        doc.fontSize(10).text('Answer:', { continued: false })
+          .fontSize(9).text(q.answer || '[No answer provided]', { 
+            indent: 20,
+            width: doc.page.width - 140,
+            align: 'left'
+          });
+        
+        doc.moveDown(0.5);
+        
+        // Add a light border
+        const currentY = doc.y;
+        doc.moveTo(50, currentY).lineTo(doc.page.width - 50, currentY)
+           .stroke('#cccccc');
+        
+        doc.moveDown(0.3);
       });
       
       doc.moveDown();

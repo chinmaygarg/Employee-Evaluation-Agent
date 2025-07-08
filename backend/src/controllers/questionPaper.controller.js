@@ -12,36 +12,75 @@ const { generateText } = require('../config/llm');
  * @access  Private
  */
 const createQuestionPaper = asyncHandler(async (req, res) => {
-  const { title, jobRole, skills, experience, duration, sections } = req.body;
+  const { title, jobRole, skills, experience, duration, sections, questionType, objectivePercentage } = req.body;
   
-  // Generate a unique exam code
-  const examCode = generateExamCode(jobRole);
+  // Validate sections format and add question counts
+  const processedSections = sections.map(section => ({
+    title: section.title || section.name,
+    description: section.description || `Questions related to ${section.title || section.name}`,
+    questionCount: section.questionCount || 5
+  }));
   
-  // Generate questions using LLM
+  logger.info(`Generating questions for ${title} with sections:`, processedSections);
+  logger.info(`Question type: ${questionType}, Objective percentage: ${objectivePercentage}%`);
+  
+  // Generate questions using LLM (experience is already normalized by middleware)
   const { questions, prompt, rawResponse } = await llmService.generateQuestionPaper({
     title,
     jobRole,
     skills,
     experience,
-    sections,
+    sections: processedSections,
     duration,
+    questionType: questionType || 'mixed',
+    objectivePercentage: objectivePercentage || 50,
   });
+  
+  // Validate that we got the right number of questions
+  const expectedTotalQuestions = processedSections.reduce((sum, s) => sum + s.questionCount, 0);
+  const actualTotalQuestions = questions.sections.reduce((sum, s) => sum + s.questions.length, 0);
+  
+  if (actualTotalQuestions !== expectedTotalQuestions) {
+    logger.warn(`Question count mismatch: expected ${expectedTotalQuestions}, got ${actualTotalQuestions}`);
+  }
   
   // Create question paper
   const questionPaper = new QuestionPaper({
-    examCode,
     title,
     jobRole,
     skills,
     experience,
     duration,
-    sections: questions.sections,
+    questionType: questionType || 'mixed',
+    objectivePercentage: objectivePercentage || 50,
+    sections: questions.sections.map(section => ({
+      title: section.title,
+      description: section.description || '',
+      questions: section.questions.map(q => ({
+        text: q.text,
+        type: q.type,
+        options: q.options || [],
+        expectedAnswer: q.expectedAnswer || q.correctAnswer || '',
+        marks: q.marks,
+        skillTag: q.skillTag
+      }))
+    })),
     createdBy: req.user._id,
     prompt,
   });
   
   // Save question paper
   await questionPaper.save();
+  
+  // Create an initial exam code for this question paper
+  const ExamCode = require('../models/examCode.model');
+  const initialExamCode = new ExamCode({
+    code: ExamCode.generateCode(),
+    questionPaperId: questionPaper._id,
+    createdBy: req.user._id,
+  });
+  
+  await initialExamCode.save();
   
   // Add questions to question bank
   const questionsForBank = [];
@@ -69,17 +108,24 @@ const createQuestionPaper = asyncHandler(async (req, res) => {
     logger.info(`Added ${questionsForBank.length} questions to question bank`);
   }
   
-  logger.info(`Created question paper: ${title} with code ${examCode}`);
+  logger.info(`Created question paper: ${title}, total questions: ${questionPaper.getTotalQuestions()}`);
   
   res.status(201).json({
     success: true,
     message: 'Question paper created successfully',
     data: {
       id: questionPaper._id,
-      examCode,
       title,
+      questionType: questionPaper.questionType,
+      objectivePercentage: questionPaper.objectivePercentage,
       totalQuestions: questionPaper.getTotalQuestions(),
       totalMarks: questionPaper.getTotalMarks(),
+      initialExamCode: initialExamCode.code,
+      sections: questionPaper.sections.map(section => ({
+        title: section.title,
+        questionCount: section.questions.length,
+        questionTypes: [...new Set(section.questions.map(q => q.type))]
+      }))
     },
   });
 });
@@ -99,7 +145,7 @@ const getAllQuestionPapers = asyncHandler(async (req, res) => {
   if (search) {
     query.$or = [
       { title: { $regex: search, $options: 'i' } },
-      { examCode: { $regex: search, $options: 'i' } },
+      { jobRole: { $regex: search, $options: 'i' } },
     ];
   }
   
@@ -129,7 +175,6 @@ const getAllQuestionPapers = asyncHandler(async (req, res) => {
     data: {
       questionPapers: questionPapers.map(paper => ({
         id: paper._id,
-        examCode: paper.examCode,
         title: paper.title,
         jobRole: paper.jobRole,
         skills: paper.skills,
@@ -173,27 +218,7 @@ const getQuestionPaperById = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * @desc    Get question paper by exam code
- * @route   GET /api/admin/question-papers/code/:examCode
- * @access  Private
- */
-const getQuestionPaperByExamCode = asyncHandler(async (req, res) => {
-  const questionPaper = await QuestionPaper.findOne({ examCode: req.params.examCode })
-    .populate('createdBy', 'name email');
-  
-  if (!questionPaper) {
-    return res.status(404).json({
-      success: false,
-      message: 'Question paper not found',
-    });
-  }
-  
-  res.status(200).json({
-    success: true,
-    data: questionPaper,
-  });
-});
+
 
 /**
  * @desc    Update question paper
@@ -571,7 +596,6 @@ module.exports = {
   createQuestionPaper,
   getAllQuestionPapers,
   getQuestionPaperById,
-  getQuestionPaperByExamCode,
   updateQuestionPaper,
   addQuestionToSection,
   removeQuestionFromSection,

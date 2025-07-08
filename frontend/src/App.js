@@ -13,6 +13,8 @@ import DashboardPage from './pages/admin/DashboardPage';
 import QuestionPapersPage from './pages/admin/QuestionPapersPage';
 import CreateQuestionPaperPage from './pages/admin/CreateQuestionPaperPage';
 import EditQuestionPaperPage from './pages/admin/EditQuestionPaperPage';
+import ViewQuestionsPage from './pages/admin/ViewQuestionsPage';
+import ExamCodesPage from './pages/admin/ExamCodesPage';
 import EvaluationsPage from './pages/admin/EvaluationsPage';
 import EvaluationDetailPage from './pages/admin/EvaluationDetailPage';
 import CandidatesPage from './pages/admin/CandidatesPage';
@@ -63,6 +65,8 @@ function App() {
         <Route path="question-papers" element={<QuestionPapersPage />} />
         <Route path="question-papers/create" element={<CreateQuestionPaperPage />} />
         <Route path="question-papers/edit/:id" element={<EditQuestionPaperPage />} />
+        <Route path="question-papers/:id/questions" element={<ViewQuestionsPage />} />
+        <Route path="question-papers/:questionPaperId/exam-codes" element={<ExamCodesPage />} />
         <Route path="evaluations" element={<EvaluationsPage />} />
         <Route path="evaluations/:id" element={<EvaluationDetailPage />} />
         <Route path="candidates" element={<CandidatesPage />} />

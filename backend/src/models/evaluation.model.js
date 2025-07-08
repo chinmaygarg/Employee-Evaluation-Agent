@@ -33,6 +33,10 @@ const questionEvaluationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: true,
     },
+    sectionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
     questionText: {
       type: String,
       required: true,
@@ -103,6 +107,29 @@ const evaluationSchema = new mongoose.Schema(
       required: true,
       min: 0,
       max: 100,
+    },
+    // NEW: Additional scoring metrics for transparency
+    completionRate: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    accuracyRate: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    answeredCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    totalQuestions: {
+      type: Number,
+      min: 1,
+      default: 1,
     },
     sectionScores: {
       type: [sectionScoreSchema],

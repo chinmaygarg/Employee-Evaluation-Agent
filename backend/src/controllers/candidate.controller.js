@@ -63,38 +63,115 @@ const getCandidateById = asyncHandler(async (req, res) => {
     });
   }
   
+  // Get detailed session information with question paper data and evaluations
+  const sessions = await ExamSession.find({
+    'candidate._id': candidate._id,
+  })
+    .populate('questionPaperId', 'title jobRole skills experience')
+    .sort({ startTime: -1 });
+  
+  // For each session, get the evaluation if it exists
+  const Evaluation = require('../models/evaluation.model');
+  const sessionsWithEvaluations = await Promise.all(
+    sessions.map(async (session) => {
+      const evaluation = await Evaluation.findOne({ sessionId: session._id });
+      
+      return {
+        _id: session._id,
+        examCode: session.examCode,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        status: session.status,
+        duration: session.duration,
+        questionPaper: session.questionPaperId,
+        evaluation: evaluation ? {
+          _id: evaluation._id,
+          overallScore: evaluation.overallScore,
+          createdAt: evaluation.createdAt,
+          evaluatedAt: evaluation.evaluatedAt,
+        } : null,
+      };
+    })
+  );
+  
+  // Also get all evaluations directly for this candidate
+  const evaluations = await Evaluation.find({ candidateId: candidate._id })
+    .populate({
+      path: 'sessionId',
+      select: 'examCode startTime endTime duration',
+    })
+    .populate({
+      path: 'questionPaperId',
+      select: 'title jobRole skills experience',
+    })
+    .sort({ createdAt: -1 });
+  
+  const candidateWithSessions = {
+    ...candidate.toObject(),
+    sessions: sessionsWithEvaluations,
+    evaluations: evaluations.map(evaluation => ({
+      _id: evaluation._id,
+      sessionId: evaluation.sessionId._id,
+      examCode: evaluation.sessionId.examCode,
+      overallScore: evaluation.overallScore,
+      createdAt: evaluation.createdAt,
+      evaluatedAt: evaluation.evaluatedAt,
+      questionPaper: evaluation.questionPaperId,
+      startTime: evaluation.sessionId.startTime,
+      endTime: evaluation.sessionId.endTime,
+      duration: evaluation.sessionId.duration,
+    })),
+  };
+  
   res.status(200).json({
     success: true,
-    data: candidate,
+    data: candidateWithSessions,
   });
 });
 
 /**
- * @desc    Get candidate by email or mobile
+ * @desc    Get candidate by email, mobile, or session ID
  * @route   GET /api/admin/candidates/search
  * @access  Private
  */
 const searchCandidate = asyncHandler(async (req, res) => {
-  const { email, mobile } = req.query;
+  const { email, mobile, sessionId } = req.query;
   
-  if (!email && !mobile) {
+  if (!email && !mobile && !sessionId) {
     return res.status(400).json({
       success: false,
-      message: 'Please provide email or mobile',
+      message: 'Please provide email, mobile, or session ID',
     });
   }
   
-  const query = {};
+  let candidate = null;
   
-  if (email) {
-    query.email = email;
+  // Search by session ID first
+  if (sessionId) {
+    const ExamSession = require('../models/examSession.model');
+    const session = await ExamSession.findById(sessionId);
+    
+    if (session && session.candidate && session.candidate._id) {
+      candidate = await Candidate.findById(session.candidate._id);
+    }
   }
   
-  if (mobile) {
-    query.mobile = mobile;
+  // If not found by session ID, search by email/mobile
+  if (!candidate) {
+    const query = {};
+    
+    if (email) {
+      query.email = email;
+    }
+    
+    if (mobile) {
+      query.mobile = mobile;
+    }
+    
+    if (Object.keys(query).length > 0) {
+      candidate = await Candidate.findOne(query);
+    }
   }
-  
-  const candidate = await Candidate.findOne(query);
   
   if (!candidate) {
     return res.status(404).json({
@@ -103,9 +180,36 @@ const searchCandidate = asyncHandler(async (req, res) => {
     });
   }
   
+  // Get evaluations for this candidate
+  const Evaluation = require('../models/evaluation.model');
+  const evaluations = await Evaluation.find({ candidateId: candidate._id })
+    .populate({
+      path: 'sessionId',
+      select: 'examCode startTime endTime duration',
+    })
+    .populate({
+      path: 'questionPaperId',
+      select: 'title jobRole skills experience',
+    })
+    .sort({ createdAt: -1 });
+  
   res.status(200).json({
     success: true,
-    data: candidate,
+    data: {
+      ...candidate.toObject(),
+      evaluations: evaluations.map(evaluation => ({
+        _id: evaluation._id,
+        sessionId: evaluation.sessionId._id,
+        examCode: evaluation.sessionId.examCode,
+        overallScore: evaluation.overallScore,
+        createdAt: evaluation.createdAt,
+        evaluatedAt: evaluation.evaluatedAt,
+        questionPaper: evaluation.questionPaperId,
+        startTime: evaluation.sessionId.startTime,
+        endTime: evaluation.sessionId.endTime,
+        duration: evaluation.sessionId.duration,
+      })),
+    },
   });
 });
 

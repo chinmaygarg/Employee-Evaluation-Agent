@@ -5,6 +5,7 @@ const {
   getEvaluationsByExamCode,
   getEvaluationsByCandidate,
   downloadEvaluationReport,
+  downloadAnswersSheet,
   regenerateEvaluation,
   getEvaluationStats,
 } = require('../controllers/evaluation.controller');
@@ -32,6 +33,9 @@ router.get('/candidate/:candidateId', getEvaluationsByCandidate);
 
 // Download evaluation report
 router.get('/:id/report', downloadEvaluationReport);
+
+// Download answers sheet
+router.get('/:id/answers', downloadAnswersSheet);
 
 // Regenerate evaluation
 router.post('/:id/regenerate', regenerateEvaluation);

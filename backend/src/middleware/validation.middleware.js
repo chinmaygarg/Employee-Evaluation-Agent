@@ -2,6 +2,31 @@ const Joi = require('joi');
 const logger = require('../config/logger');
 
 /**
+ * Middleware to normalize experience level values before validation
+ */
+const normalizeExperience = (req, res, next) => {
+  if (req.body.experience) {
+    const experienceMapping = {
+      'Entry Level': 'entry',
+      'Mid Level': 'mid', 
+      'Senior Level': 'senior',
+      'Lead/Principal': 'senior',
+      'entry': 'entry',
+      'mid': 'mid',
+      'senior': 'senior'
+    };
+    
+    const normalizedExperience = experienceMapping[req.body.experience];
+    if (normalizedExperience) {
+      const originalExperience = req.body.experience;
+      req.body.experience = normalizedExperience;
+      logger.debug(`Normalized experience from "${originalExperience}" to "${normalizedExperience}"`);
+    }
+  }
+  next();
+};
+
+/**
  * Validation middleware factory
  * @param {Object} schema - Joi validation schema 
  * @returns {Function} - Express middleware
@@ -112,6 +137,15 @@ const questionPaperSchemas = {
       'number.max': 'Duration cannot exceed 240 minutes (4 hours)',
       'any.required': 'Duration is required',
     }),
+    questionType: Joi.string().valid('objective', 'subjective', 'mixed').optional().messages({
+      'any.only': 'Question type must be one of: objective, subjective, mixed',
+    }),
+    objectivePercentage: Joi.number().integer().min(0).max(100).optional().messages({
+      'number.base': 'Objective percentage must be a number',
+      'number.integer': 'Objective percentage must be an integer',
+      'number.min': 'Objective percentage must be at least 0',
+      'number.max': 'Objective percentage cannot exceed 100',
+    }),
     sections: Joi.array().items(
       Joi.object({
         title: Joi.string().min(3).max(100).required().messages({
@@ -120,6 +154,12 @@ const questionPaperSchemas = {
           'any.required': 'Section title is required',
         }),
         description: Joi.string().max(500).allow(''),
+        questionCount: Joi.number().integer().min(1).max(50).optional().messages({
+          'number.base': 'Question count must be a number',
+          'number.integer': 'Question count must be an integer',
+          'number.min': 'Question count must be at least 1',
+          'number.max': 'Question count cannot exceed 50',
+        }),
       })
     ).min(1).required().messages({
       'array.min': 'At least one section is required',
@@ -135,8 +175,21 @@ const questionPaperSchemas = {
       'string.min': 'Question text must be at least 10 characters',
       'any.required': 'Question text is required',
     }),
-    type: Joi.string().valid('descriptive', 'mcq').required().messages({
-      'any.only': 'Question type must be one of: descriptive, mcq',
+    type: Joi.string().valid(
+      'descriptive', 
+      'mcq', 
+      'true_false', 
+      'fill_blank', 
+      'matching', 
+      'coding',
+      'essay',
+      'short_answer',
+      'problem_solving',
+      'code_explanation',
+      'case_study',
+      'design'
+    ).required().messages({
+      'any.only': 'Question type must be one of: descriptive, mcq, true_false, fill_blank, matching, coding, essay, short_answer, problem_solving, code_explanation, case_study, design',
       'any.required': 'Question type is required',
     }),
     options: Joi.when('type', {
@@ -175,6 +228,7 @@ const examSessionSchemas = {
 
 module.exports = {
   validate,
+  normalizeExperience,
   authSchemas,
   candidateSchemas,
   questionPaperSchemas,
