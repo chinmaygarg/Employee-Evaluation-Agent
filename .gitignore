@@ -9,10 +9,13 @@ node_modules/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.vercel
 
 # Production build
 /dist
 /build
+frontend/build
+build/
 
 # Logs
 logs
@@ -58,3 +61,11 @@ debug.log
 
 # Docker volumes
 /data
+
+# MongoDB data
+mongodb-data/
+
+# Backend logs and reports
+backend/logs/
+backend/reports/
+.vercel
